@@ -1,0 +1,92 @@
+# Frontend (Next.js) specific ignores
+front_end/node_modules/
+front_end/.next/
+front_end/out/
+front_end/build/
+front_end/.pnp
+front_end/.pnp.*
+front_end/.yarn/*
+!front_end/.yarn/patches
+!front_end/.yarn/plugins
+!front_end/.yarn/releases
+!front_end/.yarn/versions
+
+# Testing
+front_end/coverage/
+
+# Environment files
+front_end/.env*
+.env*
+
+# Logs
+front_end/npm-debug.log*
+front_end/yarn-debug.log*
+front_end/yarn-error.log*
+front_end/.pnpm-debug.log*
+*.log
+
+# TypeScript
+front_end/*.tsbuildinfo
+
+
+# Vercel
+front_end/.vercel
+.vercel
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python specific (for lightrag)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Docker
+.dockerignore
+Dockerfile.local
+
+# Temporary files
+*.tmp
+*.temp
