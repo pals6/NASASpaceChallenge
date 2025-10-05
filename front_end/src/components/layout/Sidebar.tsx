@@ -12,6 +12,7 @@ import {
   BookOpen,
   Network,
   CreditCard,
+  MessageCircle,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import { useState } from "react";
 
 const navigation = [
   { name: "Home", href: "/", icon: Home },
+  { name: "Search with AI", href: "/chat", icon: MessageCircle },
   { name: "Timeline", href: "/timeline", icon: Clock },
   { name: "Podcast", href: "/podcast", icon: Mic },
   { name: "Comic", href: "/comic", icon: BookOpen },
