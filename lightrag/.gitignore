@@ -46,6 +46,7 @@ neo4jWorkDir/
 # Data & Storage
 inputs/
 rag_storage/
+podcasts/
 examples/input/
 examples/output/
 output*/
