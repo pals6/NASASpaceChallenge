@@ -8,36 +8,187 @@ const api_key = process.env.NEXT_PUBLIC_API_KEY;
 // ============================================================================
 // TIMELINE DATA
 // ============================================================================
-
-export interface TimelineDataPoint {
+// src/lib/api.ts
+export type TimelineItem = {
+  title: string;
   year: number;
-  count: number;
-  highlight: string;
+  date: string;
+  mission: string;
+  impact: string;
+  summary: string;
+  link: string;
+};
+
+export const CURATED_TOPICS: readonly string[] = [
+  "Radiation",
+  "Bone Health",
+  "Muscle & Exercise",
+  "Immune System",
+  "Plants & Food",
+  "Microbes & Biofilms",
+  "Sleep & Circadian",
+  "Vision & Eye",
+  "Cardiovascular",
+  "Oxidative Stress",
+] as const;
+
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
+
+/** Canonical queries for curated topics */
+const TOPIC_QUERY: Record<string, string> = {
+  Microgravity: "microgravity AND spaceflight",
+  Radiation: "(space radiation OR ionizing radiation OR DNA repair) AND (ISS OR spaceflight)",
+  "Bone Health": "(bone OR skeletal OR osteoporosis OR ARED) AND (microgravity OR spaceflight)",
+  "Muscle & Exercise": "(muscle atrophy OR exercise countermeasures OR ARED) AND (ISS OR spaceflight)",
+  "Immune System": "(immune OR inflammation OR cytokines) AND (spaceflight OR ISS)",
+  "Plants & Food": "(plants OR Arabidopsis OR crop OR food) AND (microgravity OR space station)",
+  "Microbes & Biofilms": "(microbe OR bacteria OR biofilm OR antibiotic resistance) AND (microgravity OR ISS)",
+  "Sleep & Circadian": "(sleep OR circadian OR lighting) AND (ISS OR spaceflight)",
+  "Vision & Eye": "(vision OR ocular OR SANS OR ophthalmic) AND (spaceflight OR ISS)",
+  Cardiovascular: "(cardio OR cardiovascular OR heart OR vascular) AND (spaceflight OR microgravity)",
+  "Oxidative Stress": "(oxidative stress OR ROS OR antioxidant) AND (spaceflight OR microgravity)",
+};
+
+/** Heuristic mapping: if a non-curated topic is ever passed, map to a curated one */
+export function canonicalizeTopic(input: string): string {
+  const s = input.toLowerCase();
+  const M = (k: string) => k; // tiny helper to keep lines short
+
+  if (TOPIC_QUERY[input]) return input;
+  if (/\bmicrogravity|spaceflight|iss\b/.test(s)) return M("Microgravity");
+  if (/\bradiation|ionizing|dna repair|cosmic|solar\b/.test(s)) return M("Radiation");
+  if (/\bbone|osteoporosis|ared\b/.test(s)) return M("Bone Health");
+  if (/\bmuscle|exercise|ared\b/.test(s)) return M("Muscle & Exercise");
+  if (/\bimmune|cytokine|inflammation\b/.test(s)) return M("Immune System");
+  if (/\bplant|arabidopsis|crop|food\b/.test(s)) return M("Plants & Food");
+  if (/\bmicrobe|bacteria|biofilm|antibiotic\b/.test(s)) return M("Microbes & Biofilms");
+  if (/\bsleep|circadian|lighting\b/.test(s)) return M("Sleep & Circadian");
+  if (/\bvision|ocular|sans|eye\b/.test(s)) return M("Vision & Eye");
+  if (/\bcardio|heart|vascular\b/.test(s)) return M("Cardiovascular");
+  if (/\boxidative|ros|antioxidant\b/.test(s)) return M("Oxidative Stress");
+
+  // default to Microgravity (safest general topic)
+  return "Microgravity";
 }
 
-export const getTimelineData = (): TimelineDataPoint[] => {
-  return [
-    { year: 2015, count: 5, highlight: "Initial ISS Biology Studies" },
-    { year: 2016, count: 8, highlight: "Plant Growth Experiments" },
-    { year: 2017, count: 12, highlight: "Sleep & Circadian Research" },
-    { year: 2018, count: 15, highlight: "Bone Density Studies" },
-    { year: 2019, count: 18, highlight: "Microbial Behavior Analysis" },
-    { year: 2020, count: 22, highlight: "COVID-19 Space Research" },
-    { year: 2021, count: 25, highlight: "DNA Repair Mechanisms" },
-    { year: 2022, count: 20, highlight: "Muscle Atrophy Prevention" },
-    { year: 2023, count: 16, highlight: "Advanced Life Support" },
-  ];
-};
+/** CURATED ONLY: always return our set, regardless of server labels */
+export async function fetchPopularTopics(limit = 20): Promise<string[]> {
+  return [...CURATED_TOPICS].slice(0, limit);
+}
 
-export const getTimelineStats = () => {
-  const data = getTimelineData();
-  return {
-    totalYears: data.length,
-    totalStudies: data.reduce((sum, d) => sum + d.count, 0),
-    maxCount: Math.max(...data.map((d) => d.count)),
-    minCount: Math.min(...data.map((d) => d.count)),
+/** If you want the “extra” labels to display in a second group later */
+export async function fetchExtraTopics(limit = 30): Promise<string[]> {
+  try {
+    const res = await fetch(`/api/popular?limit=${limit}`, {
+      headers: { "ngrok-skip-browser-warning": "true", "X-API-Key": API_KEY },
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const server: string[] = Array.isArray(data) ? data.map(String).filter(Boolean) : [];
+
+    const curatedSet = new Set(CURATED_TOPICS.map((t) => t.toLowerCase()));
+    const uniq = new Set<string>();
+    const extras: string[] = [];
+    for (const t of server) {
+      const k = t.toLowerCase();
+      if (!curatedSet.has(k) && !uniq.has(k)) {
+        extras.push(t);
+        uniq.add(k);
+      }
+    }
+    return extras;
+  } catch {
+    return [];
+  }
+}
+
+/** Timeline query via server proxy; robust normalization */
+export async function fetchTimeline(topic: string): Promise<TimelineItem[]> {
+  const canonical = canonicalizeTopic(topic);
+  const focus = TOPIC_QUERY[canonical] || canonical;
+
+  const body = {
+    query: `Create a student-friendly timeline from NASA space biology publications about: ${focus}.`,
+    mode: "mix",
+    only_need_context: false,
+    only_need_prompt: false,
+    response_type: "multiple paragraphs",
+    top_k: 20,
+    chunk_top_k: 20,
+    max_entity_tokens: 5000,
+    max_relation_tokens: 3000,
+    max_total_tokens: 12000,
+    enable_rerank: true,
+    include_references: true,
+    stream: false,
+    user_prompt:
+`Return a STRICT JSON array (no prose) where each element is:
+{"title":string,"year":number,"date":string,"mission":string,"impact":string,"summary":string,"link":string}.
+Include 6–10 items across years. Prefer Results/Conclusions. If full date unknown use YYYY-01-01.`,
   };
-};
+
+  const res = await fetch("/api/query", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "ngrok-skip-browser-warning": "true",
+      "X-API-Key": API_KEY,
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  if (!res.ok) throw new Error(`timeline request failed: ${res.status}`);
+
+  let payload: unknown;
+  try {
+    payload = await res.json();
+  } catch {
+    const txt = await res.text();
+    payload = { response: txt };
+  }
+
+  if (Array.isArray(payload)) return normalizeItems(payload);
+
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "response" in payload &&
+    typeof (payload as any).response === "string"
+  ) {
+    const raw = (payload as any).response as string;
+    const clean = raw.replace(/^```json/i, "").replace(/```$/i, "").trim();
+    try {
+      const arr = JSON.parse(clean);
+      return normalizeItems(arr);
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
+function normalizeItems(arr: any[]): TimelineItem[] {
+  return (arr || []).map((d) => {
+    const y = Number(d?.year);
+    const safeYear = Number.isFinite(y) && y > 0 ? y : 2000;
+    return {
+      title: String(d?.title ?? ""),
+      year: safeYear,
+      date: typeof d?.date === "string" && d.date ? d.date : `${safeYear}-01-01`,
+      mission: String(d?.mission ?? ""),
+      impact: String(d?.impact ?? ""),
+      summary: String(d?.summary ?? ""),
+      link: String(d?.link ?? ""),
+    };
+  });
+}
+
+
+
+
 
 // ============================================================================
 // PODCAST DATA
@@ -198,9 +349,10 @@ export const getDocuments = async (query: string): Promise<DocumentResult[]> => 
     const data: BackendResponse = await response.json();
 
     const processed: unknown[] = [];
-    if (Array.isArray(data.statuses?.processed)) {
-      processed.push(...data.statuses.processed);
-    }
+    const statuses = data.statuses;
+    if (statuses && Array.isArray(statuses.processed)) {
+  processed.push(...statuses.processed);
+}
     const records = data as Record<string, unknown>;
     if (Array.isArray(records.documents)) {
       processed.push(...(records.documents as BackendDoc[]));
