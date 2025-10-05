@@ -478,6 +478,7 @@ type StreamChunk = {
 export interface SendMessageOptions {
   signal?: AbortSignal;
   onToken?: (token: string) => void;
+  conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
 export interface SendMessageResult {
@@ -516,6 +517,29 @@ export const sendMessage = async (
   }
 
   const url = `${api_url}/query/stream`;
+  const payload = {
+    query: prompt,
+    mode: "mix",
+    only_need_context: false,
+    only_need_prompt: false,
+    response_type:
+      "provide the content always cited with source document path. Content should include multiple paragraphs.",
+    top_k: 10,
+    chunk_top_k: 10,
+    max_entity_tokens: 10000,
+    max_relation_tokens: 10000,
+    max_total_tokens: 30000,
+    user_prompt: "Provide list of all source paths for retrived documents",
+    enable_rerank: true,
+    include_references: true,
+    stream: true,
+    conversation_history: Array.isArray(options.conversationHistory)
+      ? options.conversationHistory
+          .filter((item) => item.role === "user" && item.content.trim().length > 0)
+          .map((item) => ({ role: item.role, content: item.content }))
+      : [],
+  };
+
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -523,7 +547,7 @@ export const sendMessage = async (
       "ngrok-skip-browser-warning": "true",
       ...(api_key ? { "X-API-Key": api_key } : {}),
     },
-    body: JSON.stringify({ query: prompt }),
+    body: JSON.stringify(payload),
     signal: options.signal,
   });
 

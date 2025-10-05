@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Markdown } from "@/components/ui/markdown";
 import {
   Loader2,
   MessageCircle,
@@ -77,6 +78,10 @@ export default function ChatPage() {
     if (!trimmed || isThinking) return;
 
     const now = Date.now();
+    const userHistory = messages
+      .filter((msg) => msg.role === "user")
+      .map((msg) => ({ role: "user" as const, content: msg.content }));
+
     const userMessage: ChatMessage = {
       id: `${now}-user`,
       role: "user",
@@ -107,6 +112,7 @@ export default function ChatPage() {
     try {
       const result = await sendMessage(trimmed, {
         signal: controller.signal,
+        conversationHistory: userHistory,
         onToken: (token) => {
           streamedContent += token;
           setMessages((prev) =>
@@ -205,9 +211,13 @@ export default function ChatPage() {
                             : "bg-primary text-primary-foreground"
                         )}
                       >
-                        <p className="whitespace-pre-line leading-relaxed">
-                          {message.content}
-                        </p>
+                        {message.role === "assistant" ? (
+                          <Markdown content={message.content} className="max-w-none" />
+                        ) : (
+                          <p className="whitespace-pre-line leading-relaxed">
+                            {message.content}
+                          </p>
+                        )}
                         <div className="mt-2 flex items-center gap-2 text-[11px] uppercase tracking-wide text-white/50">
                           <Timer className="h-3 w-3" />
                           {new Date(message.timestamp).toLocaleTimeString([], {
