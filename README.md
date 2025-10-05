@@ -1,8 +1,4 @@
 ````markdown
-<div align="center">
-  <img src="front_end/public/brand/logos/default.svg" alt="Aletheia Logo" width="120" />
-</div>
-
 # 🪐 **Aletheia**  
 ### *Revealing the science of life beyond Earth.*
 
