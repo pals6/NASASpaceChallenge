@@ -1,5 +1,3 @@
----
-
 ````markdown
 <div align="center">
   <img src="front_end/public/brand/logos/default.svg" alt="Aletheia Logo" width="120" />
@@ -72,8 +70,7 @@ Visit [http://localhost:3000](http://localhost:3000)
 ### 3️⃣ Setup LightRAG Backend
 
 ```bash
-git clone https://github.com/HKUDS/LightRAG.git
-cd LightRAG
+cd lightrag
 pip install -e ".[api]"
 lightrag-server
 ```
@@ -111,7 +108,5 @@ Aletheia uses LightRAG to power **AI search & knowledge graph** features.
 MIT License — Open for educational and research use.
 
 ```
-
----
 
 ```
