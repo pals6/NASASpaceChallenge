@@ -110,7 +110,11 @@ export default function TimelinePage() {
         <h2 className="font-semibold mb-2">Studies by Year</h2>
 
         {loading ? (
-          <div className="py-16 text-center text-gray-500">Loading timeline…</div>
+          <div className="py-16 flex flex-col items-center justify-center gap-4 text-gray-600">
+            <div className="h-12 w-12 rounded-full border-4 border-blue-500/70 border-t-transparent animate-spin"></div>
+            <div className="text-sm font-medium">Loading timeline…</div>
+            <div className="text-xs text-gray-400">Fetching mission milestones</div>
+          </div>
         ) : err ? (
           <div className="py-16 text-center text-rose-600">Error: {err}</div>
         ) : !years.length ? (
