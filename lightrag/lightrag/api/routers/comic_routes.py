@@ -9,6 +9,7 @@ import uuid
 import base64
 import textwrap
 import shutil
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
@@ -302,11 +303,15 @@ class ComicCreateResponse(BaseModel):
     message: str = Field(description="Status message")
     comic_path: Optional[str] = Field(
         default=None,
-        description="Filesystem path to the generated comic file (server-side)."
+        description="Filesystem path to the generated comic ZIP file (server-side)."
     )
     comic_mime_type: Optional[str] = Field(
-        default="image/png",
-        description="MIME type of the generated comic."
+        default="application/zip",
+        description="MIME type of the generated comic (ZIP file containing all pages)."
+    )
+    total_pages: Optional[int] = Field(
+        default=None,
+        description="Total number of comic pages generated."
     )
     metadata: Optional[Dict[str, Any]] = Field(
         default=None,
@@ -373,7 +378,7 @@ def create_comic_routes(rag, api_key: Optional[str] = None, output_dir: Optional
         dependencies=[Depends(combined_auth)],
         responses={
             200: {
-                "description": "Comic generated successfully",
+                "description": "Comic generated successfully - Returns ZIP file containing all comic pages",
                 "content": {
                     "application/json": {
                         "schema": ComicCreateResponse.model_json_schema(),
@@ -383,14 +388,15 @@ def create_comic_routes(rag, api_key: Optional[str] = None, output_dir: Optional
                                 "value": {
                                     "status": "success",
                                     "message": "Comic generated",
-                                    "comic_path": "/abs/path/to/comics/2025-10-04/comic_3f2b7b.png",
-                                    "comic_mime_type": "image/png",
+                                    "comic_path": "/abs/path/to/comics/2025-10-04/comic_3f2b7b.zip",
+                                    "comic_mime_type": "application/zip",
+                                    "total_pages": 2,
                                     "metadata": {
                                         "topic": "Effects of microgravity on plant growth",
                                         "title": "Space Plants: A Scientific Adventure",
-                                        "total_panels": 6,
+                                        "total_panels": 8,
                                         "art_style": "scientific",
-                                        "model": "gpt-4o-mini",
+                                        "model": "gemini-2.5-flash",
                                         "retrieval": {
                                             "mode": "mix",
                                             "chunks_used": 3
@@ -476,22 +482,32 @@ def create_comic_routes(rag, api_key: Optional[str] = None, output_dir: Optional
                     api_key=request.gemini_api_key
                 )
                 
-                # Return the first page (main comic page)
+                # Return all comic pages as a ZIP file
                 if comic_page_paths:
-                    main_comic_path = comic_page_paths[0]
-                    comic_filename = f"comic_{uuid.uuid4().hex[:8]}.png"
-                    final_path = date_folder / comic_filename
+                    comic_id = uuid.uuid4().hex[:8]
                     
-                    # Copy the first page to a final named file
-                    shutil.copy2(main_comic_path, final_path)
+                    # Create a ZIP file containing all pages
+                    zip_filename = f"comic_{comic_id}.zip"
+                    zip_path = date_folder / zip_filename
+                    
+                    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                        for i, page_path in enumerate(comic_page_paths, 1):
+                            # Add each page to the ZIP with a descriptive name
+                            arcname = f"page_{i}.png"
+                            zipf.write(page_path, arcname)
                     
                     # -----------------------------
-                    # 3) Return the comic file
+                    # 3) Return the ZIP file containing all pages
                     # -----------------------------
                     return FileResponse(
-                        path=str(final_path),
-                        media_type="image/png",
-                        filename=comic_filename,
+                        path=str(zip_path),
+                        media_type="application/zip",
+                        filename=zip_filename,
+                        headers={
+                            "Content-Disposition": f"attachment; filename={zip_filename}",
+                            "X-Comic-Pages": str(len(comic_page_paths)),
+                            "X-Comic-ID": comic_id
+                        }
                     )
                 else:
                     raise RuntimeError("No comic pages were generated")

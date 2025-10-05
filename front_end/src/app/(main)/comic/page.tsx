@@ -20,8 +20,8 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { useAppContext } from "@/contexts/AppContext";
-import { generateComic, getComicExamples, ComicPage as ComicPageType } from "@/lib/api";
+import { useAppContext, ComicSessionData } from "@/contexts/AppContext";
+import { generateComic, getComicExamples } from "@/lib/api";
 
 const gradientPalette = [
   { from: "#fddb92", to: "#d1fdff" },
@@ -40,14 +40,7 @@ const highlightCard = {
   gradientTo: "#c86dd7",
 };
 
-type ComicSession = {
-  id: string;
-  storyIdea: string;
-  pagesRequested: 1 | 2;
-  pages: ComicPageType[];
-  gradientFrom: string;
-  gradientTo: string;
-};
+type ComicSession = ComicSessionData;
 
 const pickGradient = (index: number) => {
   const palette = gradientPalette[index % gradientPalette.length];
@@ -55,15 +48,15 @@ const pickGradient = (index: number) => {
 };
 
 export default function ComicPage() {
-  const { addToComicHistory } = useAppContext();
+  const { addToComicHistory, comicSession, setComicSession } = useAppContext();
   const [storyIdea, setStoryIdea] = useState("");
   const [pagesRequested, setPagesRequested] = useState<1 | 2>(1);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [session, setSession] = useState<ComicSession | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [activePageIndex, setActivePageIndex] = useState(0);
 
   const exampleStories = getComicExamples();
+  const session = comicSession;
 
   const releaseSessionResources = (value: ComicSession | null) => {
     if (!value) return;
@@ -73,13 +66,6 @@ export default function ComicPage() {
       }
     });
   };
-
-  useEffect(() => {
-    return () => {
-      releaseSessionResources(session);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleGenerate = async (idea?: string, pageCount?: 1 | 2) => {
     const story = (idea ?? storyIdea).trim();
@@ -91,7 +77,9 @@ export default function ComicPage() {
       const comic = await generateComic(story, count);
       const gradientIndex = Math.floor(Math.random() * gradientPalette.length);
       const { from, to } = pickGradient(gradientIndex);
-      releaseSessionResources(session);
+      if (comicSession) {
+        releaseSessionResources(comicSession);
+      }
       const newSession: ComicSession = {
         id: `${Date.now()}`,
         storyIdea: story,
@@ -101,7 +89,7 @@ export default function ComicPage() {
         gradientTo: to,
       };
 
-      setSession(newSession);
+      setComicSession(newSession);
       addToComicHistory(story);
       setStoryIdea("");
       setActivePageIndex(0);
@@ -113,15 +101,15 @@ export default function ComicPage() {
   };
 
   useEffect(() => {
-    if (!session) {
+    if (!comicSession) {
       setIsDialogOpen(false);
       return;
     }
 
-    if (activePageIndex > session.pages.length - 1) {
+    if (activePageIndex > comicSession.pages.length - 1) {
       setActivePageIndex(0);
     }
-  }, [session, activePageIndex]);
+  }, [comicSession, activePageIndex]);
 
   const cardsToShow: Array<
     | { type: "session"; data: ComicSession }
