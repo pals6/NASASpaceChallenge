@@ -1,0 +1,110 @@
+````markdown
+<div align="center">
+  <img src="front_end/public/brand/logos/default.svg" alt="Aletheia Logo" width="120" />
+</div>
+
+# 🌌 Aletheia  
+### *Revealing the science of life beyond Earth*
+
+_Built for the [NASA Space Apps Challenge 2025](https://www.spaceappschallenge.org/)_
+
+---
+
+## 🌟 Overview
+
+NASA has decades of **space biology experiments** — essential for planning safe human exploration of the Moon and Mars — but this knowledge is scattered and hard to navigate.
+
+**Aletheia** (from the Greek ἀλήθεια — “truth” or “revelation”) is an **AI-powered dynamic dashboard** that organizes over 600 NASA bioscience publications into an **interactive, intelligent knowledge base**.
+
+With **AI search, knowledge graphs, and engaging visual tools**, Aletheia helps scientists, mission planners, and learners unlock insights from NASA’s space biology research.
+
+---
+
+## ✨ Features
+
+- 🔎 **Search with AI** — Ask natural-language questions; get instant answers sourced from NASA bioscience papers  
+- 🕐 **Timeline** — Explore breakthroughs in space biology year by year  
+- 🔗 **Knowledge Graph** — Visualize relationships between studies, topics, and missions  
+- 🎙️ **Podcast Creator** — Turn scientific findings into short, engaging audio dialogues  
+- 📚 **Comic Generator** — Convert research stories into easy-to-grasp comics  
+- 🎴 **Flash Cards** — Study key space biology concepts interactively  
+- 🧭 **NASA-inspired UI** — Accessible, mobile-friendly, and visually stunning
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer          | Technologies |
+|----------------|-------------|
+| **Frontend**   | [Next.js 15](https://nextjs.org/) · TypeScript · TailwindCSS v4 · shadcn/ui |
+| **Backend**    | [LightRAG](https://github.com/HKUDS/LightRAG) — Retrieval-Augmented Generation & Knowledge Graph |
+| **Data**       | 600+ NASA Space Biology open-access publications (CSV + PubMed links) |
+| **Visualization** | Interactive timeline charts, network graphs, dynamic UI components |
+
+---
+
+## 🚀 Getting Started
+
+### 1️⃣ Prerequisites
+- Node.js 18+
+- npm or yarn
+- Python 3.10+ (if running LightRAG backend)
+
+### 2️⃣ Setup Frontend
+
+```bash
+cd front_end
+npm install
+npm run dev
+````
+
+Open [http://localhost:3000](http://localhost:3000).
+
+### 3️⃣ Setup LightRAG Backend
+
+```bash
+git clone https://github.com/HKUDS/LightRAG.git
+cd LightRAG
+pip install -e ".[api]"
+lightrag-server
+```
+
+Configure your **OpenAI API key** or preferred LLM in `.env`.
+Our app connects to LightRAG to power **AI search & knowledge graph**.
+
+---
+
+## 🌌 Data Source
+
+* [NASA Space Biology Publications CSV](https://osdr.nasa.gov/)
+
+Aletheia currently indexes **600+ open-access NASA space biology studies** to build the knowledge graph and power AI-driven insights.
+
+---
+
+## 🌠 Future Directions
+
+* 🔬 Advanced semantic search with embeddings
+* 🌍 Real-time OSDR API integration
+* 🧑‍🚀 Mission planning dashboards for Moon & Mars exploration
+* 🌐 Multilingual support for global accessibility
+* 🪐 AR/VR learning experiences for space biology education
+
+---
+
+## 👩‍🚀 Team
+
+**Odd One Bit** — Niwant Salunke, Pallavi Bichpuriya, Sanjyot Sathe & Yashodhan Jaltare.
+*Built with ❤️ during the NASA Space Apps Challenge 2025.*
+
+---
+
+## 📄 License
+
+MIT License — open for educational and research use.
+
+```
+
+---
+
+```
