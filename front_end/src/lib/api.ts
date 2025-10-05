@@ -462,6 +462,136 @@ export const getDocuments = async (query: string): Promise<DocumentResult[]> => 
   }
 };
 
+type StreamReference = {
+  reference_id?: string | number;
+  file_path?: string;
+  title?: string;
+  source?: string;
+};
+
+type StreamChunk = {
+  references?: StreamReference[];
+  response?: string;
+  error?: string;
+};
+
+export interface SendMessageOptions {
+  signal?: AbortSignal;
+  onToken?: (token: string) => void;
+}
+
+export interface SendMessageResult {
+  message: string;
+  references: DocumentResult[];
+}
+
+const referencesToDocuments = (
+  refs: StreamReference[] | undefined
+): DocumentResult[] => {
+  if (!Array.isArray(refs)) return [];
+  return refs.map((ref, index) => {
+    const id = ref.reference_id
+      ? String(ref.reference_id)
+      : `ref-${index + 1}`;
+    const url = ref.file_path && /^https?:/i.test(ref.file_path)
+      ? ref.file_path
+      : undefined;
+    const title = ref.title ?? ref.file_path ?? `Reference ${id}`;
+    const source = ref.source ?? undefined;
+    return {
+      id,
+      title,
+      url,
+      source,
+    };
+  });
+};
+
+export const sendMessage = async (
+  prompt: string,
+  options: SendMessageOptions = {}
+): Promise<SendMessageResult> => {
+  if (!api_url) {
+    throw new Error("NEXT_PUBLIC_API_URL is not set; cannot send message");
+  }
+
+  const url = `${api_url}/query/stream`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "ngrok-skip-browser-warning": "true",
+      ...(api_key ? { "X-API-Key": api_key } : {}),
+    },
+    body: JSON.stringify({ query: prompt }),
+    signal: options.signal,
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(
+      `Failed to send message: ${response.status} ${response.statusText}`
+    );
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let aggregated = "";
+  let references: DocumentResult[] = [];
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        try {
+          const chunk = JSON.parse(buffer) as StreamChunk;
+          if (chunk.references && references.length === 0) {
+            references = referencesToDocuments(chunk.references);
+          }
+          if (chunk.response) {
+            aggregated += chunk.response;
+            options.onToken?.(chunk.response);
+          }
+        } catch (error) {
+          console.error("Failed to parse final stream chunk", error);
+        }
+      }
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    let newlineIndex = buffer.indexOf("\n");
+    while (newlineIndex !== -1) {
+      const line = buffer.slice(0, newlineIndex).trim();
+      buffer = buffer.slice(newlineIndex + 1);
+      if (line) {
+        try {
+          const chunk = JSON.parse(line) as StreamChunk;
+          if (chunk.references && references.length === 0) {
+            references = referencesToDocuments(chunk.references);
+          }
+          if (chunk.response) {
+            aggregated += chunk.response;
+            options.onToken?.(chunk.response);
+          }
+          if (chunk.error) {
+            throw new Error(chunk.error);
+          }
+        } catch (error) {
+          console.error("Failed to parse stream chunk", error, line);
+        }
+      }
+      newlineIndex = buffer.indexOf("\n");
+    }
+  }
+
+  return {
+    message: aggregated.trim(),
+    references,
+  };
+};
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -509,15 +639,25 @@ const pickCannedResponse = (prompt: string) => {
 export const generateChatResponse = async (
   prompt: string
 ): Promise<ChatMessage> => {
-  await new Promise((resolve) => setTimeout(resolve, 1200));
-
-  const content = pickCannedResponse(prompt);
-  return {
-    id: `${Date.now()}-assistant`,
-    role: "assistant",
-    content,
-    timestamp: new Date().toISOString(),
-  };
+  try {
+    const { message } = await sendMessage(prompt);
+    const trimmed = message || pickCannedResponse(prompt);
+    return {
+      id: `${Date.now()}-assistant`,
+      role: "assistant",
+      content: trimmed,
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("sendMessage failed, falling back to canned response", error);
+    const content = pickCannedResponse(prompt);
+    return {
+      id: `${Date.now()}-assistant`,
+      role: "assistant",
+      content,
+      timestamp: new Date().toISOString(),
+    };
+  }
 };
 
 // ============================================================================

@@ -17,7 +17,7 @@ import {
 import {
   ChatMessage,
   DocumentResult,
-  generateChatResponse,
+  sendMessage,
   getChatSuggestedPrompts,
   getDocuments,
 } from "@/lib/api";
@@ -41,6 +41,7 @@ export default function ChatPage() {
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const publicationsRef = useRef<HTMLDivElement | null>(null);
+  const streamControllerRef = useRef<AbortController | null>(null);
 
   const suggestedPrompts = useMemo(() => getChatSuggestedPrompts(), []);
 
@@ -75,39 +76,74 @@ export default function ChatPage() {
     const trimmed = input.trim();
     if (!trimmed || isThinking) return;
 
+    const now = Date.now();
     const userMessage: ChatMessage = {
-      id: `${Date.now()}-user`,
+      id: `${now}-user`,
       role: "user",
       content: trimmed,
       timestamp: new Date().toISOString(),
     };
+    const assistantMessageId = `${now}-assistant`;
+    const assistantPlaceholder: ChatMessage = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date().toISOString(),
+    };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
     setInput("");
     addToChatHistory(trimmed);
     setIsThinking(true);
     setIsLoadingDocuments(true);
     setDocuments([]);
 
+    const controller = new AbortController();
+    streamControllerRef.current?.abort();
+    streamControllerRef.current = controller;
+
+    let streamedContent = "";
+
     try {
-      const [reply, fetchedDocuments] = await Promise.all([
-        generateChatResponse(trimmed),
-        getDocuments(trimmed),
-      ]);
-      setMessages((prev) => [...prev, reply]);
-      setDocuments(fetchedDocuments.slice(0, 8));
+      const result = await sendMessage(trimmed, {
+        signal: controller.signal,
+        onToken: (token) => {
+          streamedContent += token;
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: streamedContent }
+                : msg
+            )
+          );
+        },
+      });
+
+      const finalContent = result.message || streamedContent;
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId ? { ...msg, content: finalContent } : msg
+        )
+      );
+
+      if (result.references.length > 0) {
+        setDocuments(result.references.slice(0, 8));
+      } else {
+        const fetchedDocuments = await getDocuments(trimmed);
+        setDocuments(fetchedDocuments.slice(0, 8));
+      }
     } catch (error) {
-      console.error("Failed to generate chat response", error);
-      setDocuments([]);
-      const fallback: ChatMessage = {
-        id: `${Date.now()}-fallback`,
-        role: "assistant",
-        content:
-          "I ran into an issue while preparing that answer. Please try asking again or adjust the question.",
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, fallback]);
+      console.error("Failed to send chat message", error);
+      const fallbackContent =
+        streamedContent.trim() ||
+        "I ran into an issue while preparing that answer. Please try asking again or adjust the question.";
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId ? { ...msg, content: fallbackContent } : msg
+        )
+      );
     } finally {
+      streamControllerRef.current = null;
       setIsThinking(false);
       setIsLoadingDocuments(false);
     }
