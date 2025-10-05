@@ -17,7 +17,7 @@ import {
   Volume2,
   Sparkles,
 } from "lucide-react";
-import { useAppContext } from "@/contexts/AppContext";
+import { useAppContext, PodcastSessionData } from "@/contexts/AppContext";
 import { generatePodcastAudio, getPodcastExamples } from "@/lib/api";
 
 const gradientPalette = [
@@ -29,15 +29,7 @@ const gradientPalette = [
   { from: "#ff9a9e", to: "#fad0c4" },
 ] as const;
 
-type PodcastSession = {
-  id: string;
-  topic: string;
-  audioUrl: string;
-  gradientFrom: string;
-  gradientTo: string;
-  duration?: string;
-  description: string;
-};
+type PodcastSession = PodcastSessionData;
 
 const highlightCard = {
   id: "highlight",
@@ -67,15 +59,22 @@ export default function PodcastPage() {
     addToPodcastHistory,
     podcastHistory,
     setCurrentPodcast,
+    podcastSessions,
+    setPodcastSessions,
   } = useAppContext();
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [sessions, setSessions] = useState<PodcastSession[]>([]);
-  const [currentSession, setCurrentSession] = useState<PodcastSession | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(
+    () => podcastSessions[0]?.id ?? null
+  );
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const exampleTopics = getPodcastExamples();
+
+  const currentSession = currentSessionId
+    ? podcastSessions.find((session) => session.id === currentSessionId) ?? podcastSessions[0] ?? null
+    : podcastSessions[0] ?? null;
 
   const handleGenerate = async (queryText?: string) => {
     const textToUse = (queryText ?? input).trim();
@@ -83,13 +82,9 @@ export default function PodcastPage() {
 
     setIsGenerating(true);
     try {
-      if (currentSession) {
-        URL.revokeObjectURL(currentSession.audioUrl);
-      }
-
       const audioBlob = await generatePodcastAudio(textToUse);
       const audioUrl = URL.createObjectURL(audioBlob);
-      const { from, to } = pickGradient(sessions.length);
+      const { from, to } = pickGradient(podcastSessions.length);
 
       const newSession: PodcastSession = {
         id: `${Date.now()}`,
@@ -100,8 +95,22 @@ export default function PodcastPage() {
         description: "Fresh AI-generated episode ready to stream.",
       };
 
-      setSessions([newSession]);
-      setCurrentSession(newSession);
+      setPodcastSessions((prev) => {
+        const existingWithoutDuplicate = prev.filter((session) => session.topic !== newSession.topic);
+        const updated = [newSession, ...existingWithoutDuplicate];
+        const trimmed = updated.slice(0, 5);
+
+        if (updated.length > trimmed.length) {
+          updated.slice(5).forEach((session) => {
+            if (session.audioUrl.startsWith("blob:")) {
+              URL.revokeObjectURL(session.audioUrl);
+            }
+          });
+        }
+
+        return trimmed;
+      });
+      setCurrentSessionId(newSession.id);
       setCurrentPodcast({ topic: textToUse, audioUrl });
       setIsPlaying(true);
       addToPodcastHistory(textToUse);
@@ -114,7 +123,7 @@ export default function PodcastPage() {
   };
 
   const handleSessionSelect = (session: PodcastSession) => {
-    setCurrentSession(session);
+    setCurrentSessionId(session.id);
     setCurrentPodcast({ topic: session.topic, audioUrl: session.audioUrl });
     setIsPlaying(true);
   };
@@ -162,15 +171,12 @@ export default function PodcastPage() {
 
     const handleLoadedMetadata = () => {
       const formatted = formatDuration(audio.duration);
-      setSessions((prev) =>
+      setPodcastSessions((prev) =>
         prev.map((session) =>
           session.id === currentSession.id
             ? { ...session, duration: formatted }
             : session
         )
-      );
-      setCurrentSession((prev) =>
-        prev ? { ...prev, duration: formatted } : prev
       );
     };
 
@@ -178,17 +184,23 @@ export default function PodcastPage() {
     return () => {
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
     };
-  }, [currentSession]);
+  }, [currentSession, setPodcastSessions]);
 
   useEffect(() => {
-    return () => {
-      sessions.forEach((session) => {
-        URL.revokeObjectURL(session.audioUrl);
-      });
-    };
-  }, [sessions]);
+    if (podcastSessions.length === 0) {
+      setCurrentSessionId(null);
+      return;
+    }
 
-  const primarySession = sessions[0] ?? null;
+    setCurrentSessionId((prev) => {
+      if (!prev || !podcastSessions.some((session) => session.id === prev)) {
+        return podcastSessions[0].id;
+      }
+      return prev;
+    });
+  }, [podcastSessions]);
+
+  const primarySession = podcastSessions[0] ?? null;
 
   const cardsToShow: Array<
     | { type: "session"; data: PodcastSession }

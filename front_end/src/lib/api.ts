@@ -1,5 +1,7 @@
 // Unified API utilities for NASA Space Biology Knowledge Base
 
+import JSZip from "jszip";
+
 const api_url = process.env.NEXT_PUBLIC_API_URL;
 const api_key = process.env.NEXT_PUBLIC_API_KEY;
 
@@ -604,18 +606,115 @@ export const generateChatResponse = async (
 export interface ComicPage {
   pageNumber: number;
   title: string;
+  imageUrl: string;
 }
+
+const COMIC_API_URL = "https://enterally-subtarsal-enola.ngrok-free.dev/comic";
+
+const toDataUrl = (value: string): string => {
+  if (!value) {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.startsWith("data:")) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("blob:")) {
+    return trimmed;
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `data:image/png;base64,${trimmed}`;
+};
 
 export const generateComic = async (
   storyIdea: string,
   pages: 1 | 2
 ): Promise<ComicPage[]> => {
-  // Simulate API call
-  await new Promise((resolve) => setTimeout(resolve, 2500));
+  const response = await fetch(COMIC_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "X-API-Key": "nasa4t0rw9wNOGFZ66QVpsNq4a5IhUv1xDfhPZuG08KT3cuafzRa4bW4G9ETKU08baZQd1MJLWOJqUMlIY1dUVilybJ3pdNhWh6vu6u0Kq0wQVyPFsjeo9KSQZ6IG1jJ",
+      "ngrok-skip-browser-warning": "true",
+    },
+    body: JSON.stringify({
+      topic: storyIdea,
+      comic_title: "NASA Comic",
+      max_num_chunks: 3,
+      model: "gemini-2.5-flash",
+      gemini_api_key: process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? "",
+      comic_pages: pages,
+      include_dialogue: true,
+    }),
+  });
 
-  return Array.from({ length: pages }, (_, i) => ({
-    pageNumber: i + 1,
-    title: `${storyIdea.slice(0, 30)}...`,
+  if (!response.ok) {
+    throw new Error(`Failed to generate comic: ${response.status} ${response.statusText}`);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  let images: string[] = [];
+  let titles: string[] | undefined;
+
+  if (contentType.includes("application/json")) {
+    const data = await response.json();
+    if (Array.isArray(data?.images)) {
+      images = data.images as string[];
+    } else if (Array.isArray(data?.pages)) {
+      images = (data.pages as Array<{ image?: string; image_url?: string }>).map((item) => item?.image ?? item?.image_url ?? "");
+    }
+    if (Array.isArray(data?.titles)) {
+      titles = data.titles as string[];
+    }
+  } else if (/zip/i.test(contentType) || contentType.includes("application/octet-stream")) {
+    const arrayBuffer = await response.arrayBuffer();
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const files = Object.values(zip.files)
+      .filter((file) => !file.dir && /\.(png|jpe?g|webp|gif)$/i.test(file.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    images = await Promise.all(
+      files.map(async (file) => {
+        const blob = await file.async("blob");
+        return URL.createObjectURL(blob);
+      })
+    );
+
+    console.log(`Comic ZIP contained ${images.length} image${images.length === 1 ? "" : "s"}.`);
+
+    const metaFile = Object.values(zip.files).find((file) => /meta/i.test(file.name) && file.name.endsWith(".json"));
+    if (metaFile) {
+      try {
+        const metaText = await metaFile.async("text");
+        const metaJson = JSON.parse(metaText);
+        if (Array.isArray(metaJson?.titles)) {
+          titles = metaJson.titles as string[];
+        }
+      } catch (error) {
+        console.warn("Failed to parse comic metadata from zip", error);
+      }
+    }
+  } else {
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    images = [url];
+  }
+
+  if (!images.length) {
+    throw new Error("Comic API returned no images");
+  }
+
+  return images.slice(0, pages).map((image, index) => ({
+    pageNumber: index + 1,
+    title: titles?.[index] ?? `${storyIdea.slice(0, 42)}${storyIdea.length > 42 ? "..." : ""}`,
+    imageUrl: toDataUrl(image),
   }));
 };
 

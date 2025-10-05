@@ -14,7 +14,7 @@ export async function createFlashcardsFromJson(
   topic: string,
   count: number = 5
 ): Promise<Flashcard[]> {
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+  const client = new OpenAI({ apiKey: '' });
 
   const userPrompt = `
 You are an educational AI generating concise flashcards about the topic: ${topic}.

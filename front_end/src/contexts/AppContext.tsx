@@ -1,6 +1,34 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  Dispatch,
+  SetStateAction,
+} from "react";
+
+import type { ComicPage } from "@/lib/api";
+
+export interface PodcastSessionData {
+  id: string;
+  topic: string;
+  audioUrl: string;
+  gradientFrom: string;
+  gradientTo: string;
+  duration?: string;
+  description: string;
+}
+
+export interface ComicSessionData {
+  id: string;
+  storyIdea: string;
+  pagesRequested: 1 | 2;
+  pages: ComicPage[];
+  gradientFrom: string;
+  gradientTo: string;
+}
 
 interface AppState {
   currentPage: string;
@@ -12,6 +40,8 @@ interface AppState {
     audioUrl: string;
   } | null;
   setCurrentPodcast: (podcast: { topic: string; audioUrl: string } | null) => void;
+  podcastSessions: PodcastSessionData[];
+  setPodcastSessions: Dispatch<SetStateAction<PodcastSessionData[]>>;
   
   // Flash cards state
   flashcardsProgress: {
@@ -29,6 +59,8 @@ interface AppState {
   // Comic state
   comicHistory: string[];
   addToComicHistory: (story: string) => void;
+  comicSession: ComicSessionData | null;
+  setComicSession: (session: ComicSessionData | null) => void;
 
   // Chat state
   chatHistory: string[];
@@ -51,6 +83,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     topic: string;
     audioUrl: string;
   } | null>(null);
+  const [podcastSessions, setPodcastSessions] = useState<PodcastSessionData[]>([]);
   
   // Flash cards state
   const [flashcardsProgress, setFlashcardsProgress] = useState({
@@ -62,6 +95,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [podcastHistory, setPodcastHistory] = useState<string[]>([]);
   const [comicHistory, setComicHistory] = useState<string[]>([]);
   const [chatHistory, setChatHistory] = useState<string[]>([]);
+  const [comicSession, setComicSession] = useState<ComicSessionData | null>(null);
   
   // Selection states
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -101,6 +135,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCurrentPage,
         currentPodcast,
         setCurrentPodcast,
+        podcastSessions,
+        setPodcastSessions,
         flashcardsProgress,
         updateFlashcardsScore,
         addAnsweredCard,
@@ -109,6 +145,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addToPodcastHistory,
         comicHistory,
         addToComicHistory,
+        comicSession,
+        setComicSession,
         chatHistory,
         addToChatHistory,
         selectedYear,

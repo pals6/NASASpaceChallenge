@@ -12,7 +12,7 @@ interface MarkdownProps {
 
 export function Markdown({ content, className }: MarkdownProps) {
   return (
-    <ReactMarkdown
+    <div
       className={cn(
         "space-y-3 text-sm leading-relaxed text-white/90",
         "[&_h1]:mt-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:text-white",
@@ -25,9 +25,8 @@ export function Markdown({ content, className }: MarkdownProps) {
         "[&_code]:rounded [&_code]:bg-black/30 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_code]:text-emerald-200",
         className
       )}
-      remarkPlugins={[remarkGfm]}
     >
-      {content}
-    </ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+    </div>
   );
 }
