@@ -38,51 +38,33 @@ export const getTimelineStats = () => {
 // PODCAST DATA
 // ============================================================================
 
-export interface PodcastExchange {
-  speaker: "Host" | "Guest";
-  text: string;
-}
+const PODCAST_API_URL = "https://enterally-subtarsal-enola.ngrok-free.dev/";
 
-export interface PodcastCollectionItem {
-  id: string;
-  title: string;
-  subtitle: string;
-  gradientFrom: string;
-  gradientTo: string;
-  accent?: string;
-}
+export const generatePodcastAudio = async (topic: string): Promise<Blob> => {
+  const response = await fetch(PODCAST_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "audio/wav",
+      "X-API-Key": "nasa4t0rw9wNOGFZ66QVpsNq4a5IhUv1xDfhPZuG08KT3cuafzRa4bW4G9ETKU08baZQd1MJLWOJqUMlIY1dUVilybJ3pdNhWh6vu6u0Kq0wQVyPFsjeo9KSQZ6IG1jJ",
+      'ngrok-skip-browser-warning': 'true',
+    },
+    body: JSON.stringify({
+      topic,
+      max_words: 100,
+      conversation_style: ["casual", "educative"],
+      creativity: 0.7,
+      podcast_name: "NASA Podcast",
+      max_num_chunks: 3,
+      model: "gpt-4o-mini",
+    }),
+  });
 
-export interface PodcastCollection {
-  id: string;
-  title: string;
-  description?: string;
-  layout: "grid" | "row";
-  itemShape: "square" | "circle" | "pill";
-  items: PodcastCollectionItem[];
-}
+  if (!response.ok) {
+    throw new Error(`Failed to generate podcast audio: ${response.status} ${response.statusText}`);
+  }
 
-export const generatePodcast = async (input: string): Promise<PodcastExchange[]> => {
-  // Simulate API call
-  await new Promise((resolve) => setTimeout(resolve, 2000));
-
-  return [
-    {
-      speaker: "Host",
-      text: "Welcome! Today we're exploring a fascinating topic in space biology. Can you tell us what makes this research so important?",
-    },
-    {
-      speaker: "Guest",
-      text: "Thanks for having me! This research helps us understand how living organisms adapt to the unique conditions of space, which is crucial for long-duration missions and has applications here on Earth too.",
-    },
-    {
-      speaker: "Host",
-      text: "That's incredible! What's the most surprising discovery you've encountered?",
-    },
-    {
-      speaker: "Guest",
-      text: "One of the most surprising findings is how quickly biological systems can adapt. It's given us new insights that we never expected and opened up entirely new research directions.",
-    },
-  ];
+  return response.blob();
 };
 
 export const getPodcastExamples = (): string[] => {
@@ -91,227 +73,6 @@ export const getPodcastExamples = (): string[] => {
     "Why do astronauts lose bone density?",
     "Can we grow food on Mars?",
     "How do microbes behave in microgravity?",
-  ];
-};
-
-export const getPodcastCollections = (): PodcastCollection[] => {
-  return [
-    {
-      id: "popular-spacecasts",
-      title: "Popular albums and singles",
-      description: "Fan-favourite dialogues from the cosmic archive",
-      layout: "grid",
-      itemShape: "square",
-      items: [
-        {
-          id: "aurora",
-          title: "Aurora Overload",
-          subtitle: "Dr. Mira Chen",
-          gradientFrom: "#5ee7df",
-          gradientTo: "#b490ca",
-        },
-        {
-          id: "gravity-gardens",
-          title: "Gravity Gardens",
-          subtitle: "Lt. Javier Sol",
-          gradientFrom: "#f6d365",
-          gradientTo: "#fda085",
-        },
-        {
-          id: "deep-sleep",
-          title: "Deep Sleep Protocols",
-          subtitle: "Dr. Aleena Rao",
-          gradientFrom: "#74ebd5",
-          gradientTo: "#acb6e5",
-        },
-        {
-          id: "cosmic-echoes",
-          title: "Cosmic Echoes",
-          subtitle: "Prof. Malik Idris",
-          gradientFrom: "#c471f5",
-          gradientTo: "#fa71cd",
-        },
-        {
-          id: "stellar-harvest",
-          title: "Stellar Harvest",
-          subtitle: "Commander Li Na",
-          gradientFrom: "#f093fb",
-          gradientTo: "#f5576c",
-        },
-        {
-          id: "tidal-labs",
-          title: "Tidal Labs",
-          subtitle: "Dr. Ren Ito",
-          gradientFrom: "#fce38a",
-          gradientTo: "#f38181",
-        },
-        {
-          id: "neural-nights",
-          title: "Neural Nights",
-          subtitle: "Dr. Saanvi Patel",
-          gradientFrom: "#fddb92",
-          gradientTo: "#d1fdff",
-        },
-        {
-          id: "astro-terrace",
-          title: "Astro Terrace",
-          subtitle: "Zara Quinn",
-          gradientFrom: "#f6d365",
-          gradientTo: "#fda085",
-        },
-      ],
-    },
-    {
-      id: "editors-picks",
-      title: "Editor's pick",
-      description: "Hand-curated deep dives for curious minds",
-      layout: "grid",
-      itemShape: "square",
-      items: [
-        {
-          id: "suit-up",
-          title: "Suit Up for Science",
-          subtitle: "Helena Park",
-          gradientFrom: "#43e97b",
-          gradientTo: "#38f9d7",
-        },
-        {
-          id: "lunar-legends",
-          title: "Lunar Legends",
-          subtitle: "Capt. Omar Reyes",
-          gradientFrom: "#30cfd0",
-          gradientTo: "#330867",
-        },
-        {
-          id: "bioforge",
-          title: "Bioforge Dispatch",
-          subtitle: "Dr. Ina Kovac",
-          gradientFrom: "#f7797d",
-          gradientTo: "#FBD786",
-        },
-        {
-          id: "orbitals",
-          title: "Orbital Originals",
-          subtitle: "Tycho James",
-          gradientFrom: "#12c2e9",
-          gradientTo: "#c471ed",
-        },
-        {
-          id: "celestial-cafe",
-          title: "Celestial Café",
-          subtitle: "Chef Lina Calder",
-          gradientFrom: "#ff9a9e",
-          gradientTo: "#fad0c4",
-        },
-        {
-          id: "stellar-sleep",
-          title: "Stellar Sleep Lab",
-          subtitle: "Dr. Hugo Finch",
-          gradientFrom: "#a18cd1",
-          gradientTo: "#fbc2eb",
-        },
-      ],
-    },
-    {
-      id: "popular-artists",
-      title: "Popular hosts",
-      description: "Voices guiding the frontier of space biology",
-      layout: "row",
-      itemShape: "circle",
-      items: [
-        {
-          id: "arjun-singh",
-          title: "Arjun Singh",
-          subtitle: "Astrobiologist",
-          gradientFrom: "#8EC5FC",
-          gradientTo: "#E0C3FC",
-        },
-        {
-          id: "maya-ruiz",
-          title: "Maya Ruiz",
-          subtitle: "Systems Engineer",
-          gradientFrom: "#ffecd2",
-          gradientTo: "#fcb69f",
-        },
-        {
-          id: "dr-zhou",
-          title: "Dr. Wei Zhou",
-          subtitle: "Microgravity Researcher",
-          gradientFrom: "#f8ffae",
-          gradientTo: "#43c6ac",
-        },
-        {
-          id: "ananya-khan",
-          title: "Ananya Khan",
-          subtitle: "Mission Commander",
-          gradientFrom: "#a3bded",
-          gradientTo: "#6991c7",
-        },
-        {
-          id: "ravi-iyer",
-          title: "Ravi Iyer",
-          subtitle: "Flight Surgeon",
-          gradientFrom: "#faffd1",
-          gradientTo: "#a1ffce",
-        },
-        {
-          id: "naomi-cole",
-          title: "Naomi Cole",
-          subtitle: "Biochemist",
-          gradientFrom: "#fee140",
-          gradientTo: "#fa709a",
-        },
-      ],
-    },
-    {
-      id: "popular-radio",
-      title: "Popular radio",
-      description: "Continuous mission control streams",
-      layout: "row",
-      itemShape: "pill",
-      items: [
-        {
-          id: "orbit-ops",
-          title: "Orbit Ops Radio",
-          subtitle: "Live telemetry & updates",
-          gradientFrom: "#ffe985",
-          gradientTo: "#fa742b",
-          accent: "#2c2c54",
-        },
-        {
-          id: "biosphere",
-          title: "Biosphere Broadcast",
-          subtitle: "Hab module soundscapes",
-          gradientFrom: "#acb6e5",
-          gradientTo: "#86fde8",
-          accent: "#2d3436",
-        },
-        {
-          id: "luna-net",
-          title: "Luna Net",
-          subtitle: "Moon base comms",
-          gradientFrom: "#cfd9df",
-          gradientTo: "#e2ebf0",
-          accent: "#1e272e",
-        },
-        {
-          id: "solwave",
-          title: "SolWave",
-          subtitle: "Solar weather alerts",
-          gradientFrom: "#ffdde1",
-          gradientTo: "#ee9ca7",
-          accent: "#2c3a47",
-        },
-        {
-          id: "stellarnight",
-          title: "Stellar Night",
-          subtitle: "Ambient observation decks",
-          gradientFrom: "#f6f0c4",
-          gradientTo: "#d99ec9",
-          accent: "#1e272e",
-        },
-      ],
-    },
   ];
 };
 
