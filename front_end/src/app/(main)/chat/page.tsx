@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,7 @@ import {
 } from "@/lib/api";
 import { useAppContext } from "@/contexts/AppContext";
 import { cn } from "@/lib/utils";
+import { useSearchParams } from "next/navigation";
 
 const INITIAL_ASSISTANT_MESSAGE: ChatMessage = {
   id: "assistant-welcome",
@@ -43,6 +44,8 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const publicationsRef = useRef<HTMLDivElement | null>(null);
   const streamControllerRef = useRef<AbortController | null>(null);
+  const searchParams = useSearchParams();
+  const hasProcessedInitialQueryRef = useRef(false);
 
   const suggestedPrompts = useMemo(() => getChatSuggestedPrompts(), []);
 
@@ -73,86 +76,93 @@ export default function ChatPage() {
     publicationsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [documents]);
 
-  const handleSubmit = async () => {
-    const trimmed = input.trim();
-    if (!trimmed || isThinking) return;
+  const submitMessage = useCallback(
+    async (rawInput: string) => {
+      const trimmed = rawInput.trim();
+      if (!trimmed || isThinking) return;
 
-    const now = Date.now();
-    const userHistory = messages
-      .filter((msg) => msg.role === "user")
-      .map((msg) => ({ role: "user" as const, content: msg.content }));
+      const now = Date.now();
+      const userHistory = messages
+        .filter((msg) => msg.role === "user")
+        .map((msg) => ({ role: "user" as const, content: msg.content }));
 
-    const userMessage: ChatMessage = {
-      id: `${now}-user`,
-      role: "user",
-      content: trimmed,
-      timestamp: new Date().toISOString(),
-    };
-    const assistantMessageId = `${now}-assistant`;
-    const assistantPlaceholder: ChatMessage = {
-      id: assistantMessageId,
-      role: "assistant",
-      content: "",
-      timestamp: new Date().toISOString(),
-    };
+      const userMessage: ChatMessage = {
+        id: `${now}-user`,
+        role: "user",
+        content: trimmed,
+        timestamp: new Date().toISOString(),
+      };
+      const assistantMessageId = `${now}-assistant`;
+      const assistantPlaceholder: ChatMessage = {
+        id: assistantMessageId,
+        role: "assistant",
+        content: "",
+        timestamp: new Date().toISOString(),
+      };
 
-    setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
-    setInput("");
-    addToChatHistory(trimmed);
-    setIsThinking(true);
-    setIsLoadingDocuments(true);
-    setDocuments([]);
+      setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
+      setInput("");
+      addToChatHistory(trimmed);
+      setIsThinking(true);
+      setIsLoadingDocuments(true);
+      setDocuments([]);
 
-    const controller = new AbortController();
-    streamControllerRef.current?.abort();
-    streamControllerRef.current = controller;
+      const controller = new AbortController();
+      streamControllerRef.current?.abort();
+      streamControllerRef.current = controller;
 
-    let streamedContent = "";
+      let streamedContent = "";
 
-    try {
-      const result = await sendMessage(trimmed, {
-        signal: controller.signal,
-        conversationHistory: userHistory,
-        onToken: (token) => {
-          streamedContent += token;
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantMessageId
-                ? { ...msg, content: streamedContent }
-                : msg
-            )
-          );
-        },
-      });
+      try {
+        const result = await sendMessage(trimmed, {
+          signal: controller.signal,
+          conversationHistory: userHistory,
+          onToken: (token) => {
+            streamedContent += token;
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantMessageId
+                  ? { ...msg, content: streamedContent }
+                  : msg
+              )
+            );
+          },
+        });
 
-      const finalContent = result.message || streamedContent;
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMessageId ? { ...msg, content: finalContent } : msg
-        )
-      );
+        const finalContent = result.message || streamedContent;
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId ? { ...msg, content: finalContent } : msg
+          )
+        );
 
-      if (result.references.length > 0) {
-        setDocuments(result.references.slice(0, 8));
-      } else {
-        const fetchedDocuments = await getDocuments(trimmed);
-        setDocuments(fetchedDocuments.slice(0, 8));
+        if (result.references.length > 0) {
+          setDocuments(result.references.slice(0, 8));
+        } else {
+          const fetchedDocuments = await getDocuments(trimmed);
+          setDocuments(fetchedDocuments.slice(0, 8));
+        }
+      } catch (error) {
+        console.error("Failed to send chat message", error);
+        const fallbackContent =
+          streamedContent.trim() ||
+          "I ran into an issue while preparing that answer. Please try asking again or adjust the question.";
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId ? { ...msg, content: fallbackContent } : msg
+          )
+        );
+      } finally {
+        streamControllerRef.current = null;
+        setIsThinking(false);
+        setIsLoadingDocuments(false);
       }
-    } catch (error) {
-      console.error("Failed to send chat message", error);
-      const fallbackContent =
-        streamedContent.trim() ||
-        "I ran into an issue while preparing that answer. Please try asking again or adjust the question.";
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMessageId ? { ...msg, content: fallbackContent } : msg
-        )
-      );
-    } finally {
-      streamControllerRef.current = null;
-      setIsThinking(false);
-      setIsLoadingDocuments(false);
-    }
+    },
+    [addToChatHistory, getDocuments, isThinking, messages]
+  );
+
+  const handleSubmit = async () => {
+    await submitMessage(input);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -165,6 +175,21 @@ export default function ChatPage() {
   const handleSuggestedPrompt = (prompt: string) => {
     setInput(prompt);
   };
+
+  useEffect(() => {
+    const initialQuery = searchParams.get("q");
+    if (!initialQuery || hasProcessedInitialQueryRef.current) return;
+
+    const trimmed = initialQuery.trim();
+    if (!trimmed) {
+      hasProcessedInitialQueryRef.current = true;
+      return;
+    }
+
+    hasProcessedInitialQueryRef.current = true;
+    setInput(trimmed);
+    void submitMessage(trimmed);
+  }, [searchParams, submitMessage]);
 
   return (
     <div className="min-h-full bg-gradient-to-b from-[#050d18] via-[#030915] to-[#02040a] p-6">

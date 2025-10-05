@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,14 +59,13 @@ const features = [
 
 export default function HomePage() {
   const [query, setQuery] = useState("");
+  const router = useRouter();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (query.trim()) {
-      // For now, just log. Later can navigate to search results or podcast
-      console.log("Search query:", query);
-      // Could navigate to podcast with pre-filled query
-      window.location.href = `/podcast?q=${encodeURIComponent(query)}`;
+    const trimmed = query.trim();
+    if (trimmed) {
+      router.push(`/chat?q=${encodeURIComponent(trimmed)}`);
     }
   };
 
