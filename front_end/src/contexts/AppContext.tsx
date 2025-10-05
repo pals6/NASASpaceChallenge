@@ -29,6 +29,10 @@ interface AppState {
   // Comic state
   comicHistory: string[];
   addToComicHistory: (story: string) => void;
+
+  // Chat state
+  chatHistory: string[];
+  addToChatHistory: (prompt: string) => void;
   
   // Timeline state
   selectedYear: number | null;
@@ -57,6 +61,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // History states
   const [podcastHistory, setPodcastHistory] = useState<string[]>([]);
   const [comicHistory, setComicHistory] = useState<string[]>([]);
+  const [chatHistory, setChatHistory] = useState<string[]>([]);
   
   // Selection states
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -85,6 +90,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setComicHistory((prev) => [story, ...prev].slice(0, 10)); // Keep last 10
   };
 
+  const addToChatHistory = (prompt: string) => {
+    setChatHistory((prev) => [prompt, ...prev].slice(0, 10));
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -100,6 +109,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addToPodcastHistory,
         comicHistory,
         addToComicHistory,
+        chatHistory,
+        addToChatHistory,
         selectedYear,
         setSelectedYear,
         selectedNode,
