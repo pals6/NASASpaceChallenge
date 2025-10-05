@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,23 +17,8 @@ import {
   Volume2,
   Sparkles,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useAppContext } from "@/contexts/AppContext";
-import {
-  generatePodcast,
-  getPodcastExamples,
-  getPodcastCollections,
-  PodcastCollection,
-  PodcastCollectionItem,
-  PodcastExchange,
-} from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { generatePodcastAudio, getPodcastExamples } from "@/lib/api";
 
 const gradientPalette = [
   { from: "#5ee7df", to: "#b490ca" },
@@ -44,30 +29,31 @@ const gradientPalette = [
   { from: "#ff9a9e", to: "#fad0c4" },
 ] as const;
 
-type GeneratedSession = {
+type PodcastSession = {
   id: string;
   topic: string;
-  summary: string;
-  duration: string;
+  audioUrl: string;
   gradientFrom: string;
   gradientTo: string;
-  exchanges: PodcastExchange[];
+  duration?: string;
+  description: string;
 };
 
-const estimateDurationFromText = (text: string) => {
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
-  if (words === 0) return "1:30";
-  const totalSeconds = Math.max(90, Math.min(900, Math.round(words * 1.3)));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+const highlightCard = {
+  id: "highlight",
+  title: "Space Biology Spotlight",
+  summary: "Weekly curated mission brief with insights from NASA's latest research logs.",
+  gradientFrom: "#3023ae",
+  gradientTo: "#c86dd7",
 };
 
-const buildSummary = (dialogue: PodcastExchange[]) => {
-  const guestLine = dialogue.find((exchange) => exchange.speaker === "Guest");
-  const base = guestLine?.text ?? dialogue[0]?.text ?? "";
-  if (!base) return "Freshly generated space story ready to play.";
-  return base.length > 140 ? `${base.slice(0, 137)}...` : base;
+const formatDuration = (seconds: number) => {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return "—";
+  }
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 };
 
 const pickGradient = (index: number) => {
@@ -75,77 +61,21 @@ const pickGradient = (index: number) => {
   return { from: palette.from, to: palette.to };
 };
 
-const renderSquareCard = (item: PodcastCollectionItem) => (
-  <div
-    key={item.id}
-    className="group flex flex-col gap-4 rounded-3xl border border-white/5 bg-white/5 p-4 transition-all hover:-translate-y-1 hover:bg-white/10"
-  >
-    <div
-      className="relative w-full overflow-hidden rounded-2xl border border-white/10 pb-[100%]"
-      style={{
-        background: `linear-gradient(140deg, ${item.gradientFrom}, ${item.gradientTo})`,
-      }}
-    >
-      <div className="absolute inset-0 bg-black/20 transition group-hover:bg-black/10" />
-      <div className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-full bg-black/40 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-white">
-        <Play className="h-3.5 w-3.5" /> Play
-      </div>
-    </div>
-    <div className="space-y-1 text-left">
-      <p className="text-base font-semibold text-white">{item.title}</p>
-      <p className="text-sm text-zinc-400">{item.subtitle}</p>
-    </div>
-  </div>
-);
-
-const renderCircleCard = (item: PodcastCollectionItem) => (
-  <div
-    key={item.id}
-    className="min-w-[160px] max-w-[180px] flex-1 rounded-3xl border border-white/5 bg-white/5 p-4 text-center transition hover:-translate-y-1 hover:bg-white/10"
-  >
-    <div
-      className="relative mx-auto mb-4 h-28 w-28 overflow-hidden rounded-full border border-white/10"
-      style={{
-        background: `linear-gradient(140deg, ${item.gradientFrom}, ${item.gradientTo})`,
-      }}
-    >
-      <div className="absolute inset-0 bg-black/20" />
-    </div>
-    <p className="text-sm font-semibold text-white">{item.title}</p>
-    <p className="text-xs text-zinc-400">{item.subtitle}</p>
-  </div>
-);
-
-const renderPillCard = (item: PodcastCollectionItem) => (
-  <div
-    key={item.id}
-    className="min-w-[240px] rounded-2xl border border-white/5 bg-white/5 p-4 transition hover:-translate-y-1 hover:bg-white/10"
-  >
-    <div
-      className="rounded-xl p-4 text-left"
-      style={{
-        background: `linear-gradient(140deg, ${item.gradientFrom}, ${item.gradientTo})`,
-        color: item.accent ?? "#0b0d15",
-      }}
-    >
-      <p className="text-sm font-semibold">{item.title}</p>
-      <p className="text-xs opacity-80">{item.subtitle}</p>
-    </div>
-  </div>
-);
-
 export default function PodcastPage() {
   const searchParams = useSearchParams();
-  const { addToPodcastHistory, podcastHistory } = useAppContext();
+  const {
+    addToPodcastHistory,
+    podcastHistory,
+    setCurrentPodcast,
+  } = useAppContext();
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [sessions, setSessions] = useState<GeneratedSession[]>([]);
-  const [currentSession, setCurrentSession] = useState<GeneratedSession | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [sessions, setSessions] = useState<PodcastSession[]>([]);
+  const [currentSession, setCurrentSession] = useState<PodcastSession | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const exampleTopics = getPodcastExamples();
-  const collections = getPodcastCollections();
 
   const handleGenerate = async (queryText?: string) => {
     const textToUse = (queryText ?? input).trim();
@@ -153,32 +83,39 @@ export default function PodcastPage() {
 
     setIsGenerating(true);
     try {
-      const result = await generatePodcast(textToUse);
+      if (currentSession) {
+        URL.revokeObjectURL(currentSession.audioUrl);
+      }
+
+      const audioBlob = await generatePodcastAudio(textToUse);
+      const audioUrl = URL.createObjectURL(audioBlob);
       const { from, to } = pickGradient(sessions.length);
-      const combinedText = result.map((exchange) => exchange.text).join(" ");
-      const newSession: GeneratedSession = {
+
+      const newSession: PodcastSession = {
         id: `${Date.now()}`,
         topic: textToUse,
-        summary: buildSummary(result),
-        duration: estimateDurationFromText(combinedText),
+        audioUrl,
         gradientFrom: from,
         gradientTo: to,
-        exchanges: result,
+        description: "Fresh AI-generated episode ready to stream.",
       };
-      setSessions((prev) => [newSession, ...prev]);
+
+      setSessions([newSession]);
       setCurrentSession(newSession);
+      setCurrentPodcast({ topic: textToUse, audioUrl });
       setIsPlaying(true);
       addToPodcastHistory(textToUse);
       setInput("");
     } catch (error) {
-      console.error("Failed to generate podcast:", error);
+      console.error("Failed to generate podcast audio:", error);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const handleSessionSelect = (session: GeneratedSession) => {
+  const handleSessionSelect = (session: PodcastSession) => {
     setCurrentSession(session);
+    setCurrentPodcast({ topic: session.topic, audioUrl: session.audioUrl });
     setIsPlaying(true);
   };
 
@@ -191,42 +128,113 @@ export default function PodcastPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (currentSession) {
+      if (audio.src !== currentSession.audioUrl) {
+        audio.src = currentSession.audioUrl;
+      }
+
+      if (isPlaying) {
+        audio
+          .play()
+          .then(() => {
+            /* playback started */
+          })
+          .catch(() => {
+            setIsPlaying(false);
+          });
+      } else {
+        audio.pause();
+      }
+    } else {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    }
+  }, [currentSession, isPlaying]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !currentSession) return;
+
+    const handleLoadedMetadata = () => {
+      const formatted = formatDuration(audio.duration);
+      setSessions((prev) =>
+        prev.map((session) =>
+          session.id === currentSession.id
+            ? { ...session, duration: formatted }
+            : session
+        )
+      );
+      setCurrentSession((prev) =>
+        prev ? { ...prev, duration: formatted } : prev
+      );
+    };
+
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    return () => {
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+    };
+  }, [currentSession]);
+
+  useEffect(() => {
+    return () => {
+      sessions.forEach((session) => {
+        URL.revokeObjectURL(session.audioUrl);
+      });
+    };
+  }, [sessions]);
+
+  const primarySession = sessions[0] ?? null;
+
+  const cardsToShow: Array<
+    | { type: "session"; data: PodcastSession }
+    | { type: "highlight"; data: typeof highlightCard }
+  > = [];
+
+  if (primarySession) {
+    cardsToShow.push({ type: "session", data: primarySession });
+  }
+  cardsToShow.push({ type: "highlight", data: highlightCard });
+
+  const limitedCards = cardsToShow.slice(0, 2);
+
+  const handleDownload = () => {
+    if (!currentSession) return;
+    const link = document.createElement("a");
+    link.href = currentSession.audioUrl;
+    const safeTopic = currentSession.topic.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+    link.download = `${safeTopic || "podcast"}.wav`;
+    link.click();
+  };
+
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-[#0b0d18] via-[#05070f] to-[#03040a] text-white pb-[140px]">
-      <div className="mx-auto max-w-6xl px-6 pb-24 pt-12 space-y-12">
+      <audio ref={audioRef} hidden />
+      <div className="mx-auto max-w-4xl px-6 pb-24 pt-12 space-y-12">
         <header className="space-y-2">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.3em] text-emerald-200">
             <Sparkles className="h-3.5 w-3.5" /> Spacecast hub
           </span>
-          <h1 className="text-4xl font-bold sm:text-5xl">Browse cosmic audio stories</h1>
-          <p className="max-w-2xl text-sm text-zinc-400 sm:text-base">
-            Explore curated collections and spin up new AI-hosted episodes. Your generated podcasts appear as cards below and are ready for playback.
+          <h1 className="text-4xl font-bold sm:text-5xl">Your space stories</h1>
+          <p className="max-w-xl text-sm text-zinc-400 sm:text-base">
+            Keep it simple: the newest mix you generate and a single editor highlight are front and centre.
           </p>
         </header>
 
-        <section className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-semibold">Your sessions</h2>
-              <p className="text-sm text-zinc-400">Freshly generated mixes</p>
-            </div>
-            <button className="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-500 hover:text-white">
-              Show all
-            </button>
-          </div>
-
-          {sessions.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {sessions.map((session) => (
-                <div
+        <section className="grid gap-6 md:grid-cols-2">
+          {limitedCards.map((card) => {
+            if (card.type === "session") {
+              const session = card.data;
+              return (
+                <button
                   key={session.id}
-                  role="button"
-                  tabIndex={0}
+                  type="button"
                   onClick={() => handleSessionSelect(session)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") handleSessionSelect(session);
-                  }}
-                  className="group relative overflow-hidden rounded-3xl p-5 text-left shadow-lg transition hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                  className="group relative overflow-hidden rounded-3xl p-6 text-left shadow-lg transition hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
                   style={{
                     background: `linear-gradient(150deg, ${session.gradientFrom}, ${session.gradientTo})`,
                   }}
@@ -235,11 +243,11 @@ export default function PodcastPage() {
                   <div className="relative flex h-full flex-col justify-between gap-6 text-white">
                     <div className="space-y-3">
                       <Badge className="rounded-full border-none bg-white/15 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white">
-                        Session
+                        Latest session
                       </Badge>
                       <div className="space-y-2">
                         <h3 className="text-xl font-semibold leading-tight">{session.topic}</h3>
-                        <p className="text-sm text-white/80">{session.summary}</p>
+                        <p className="text-sm text-white/80">{session.description}</p>
                       </div>
                     </div>
                     <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-white/80">
@@ -247,61 +255,53 @@ export default function PodcastPage() {
                         <Play className="h-4 w-4" /> Tap to play
                       </span>
                       <span className="inline-flex items-center gap-2">
-                        <Clock className="h-3.5 w-3.5" /> {session.duration}
+                        <Clock className="h-3.5 w-3.5" /> {session.duration ?? "—"}
                       </span>
                     </div>
-                    <div className="flex justify-end">
+                  </div>
+                </button>
+              );
+            }
+
+            const highlight = card.data;
+            return (
+              <div
+                key={highlight.id}
+                className="flex flex-col justify-between overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg"
+              >
+                <div className="space-y-3">
+                  <Badge className="rounded-full border-none bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.35em] text-white">
+                    Spotlight
+                  </Badge>
+                  <h3 className="text-2xl font-semibold text-white">{highlight.title}</h3>
+                  <p className="text-sm text-zinc-300">{highlight.summary}</p>
+                </div>
+                <div
+                  className="mt-6 rounded-2xl p-5 text-sm text-white"
+                  style={{
+                    background: `linear-gradient(150deg, ${highlight.gradientFrom}, ${highlight.gradientTo})`,
+                  }}
+                >
+                  <p className="mb-4 font-semibold uppercase tracking-[0.3em] text-white/80">
+                    Quick listen ideas
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {exampleTopics.slice(0, 2).map((topic) => (
                       <Button
+                        key={topic}
                         variant="ghost"
-                        size="sm"
-                        className="rounded-full border border-white/20 bg-white/10 px-4 text-xs text-white hover:bg-white/20"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setCurrentSession(session);
-                          setIsDialogOpen(true);
-                        }}
+                        className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/20"
+                        onClick={() => handleGenerate(topic)}
                       >
-                        View transcript
+                        {topic}
                       </Button>
-                    </div>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-3xl border border-dashed border-white/15 bg-white/5 p-10 text-center text-sm text-zinc-500">
-              Generate a topic below to populate your personalised queue of space biology sessions.
-            </div>
-          )}
+              </div>
+            );
+          })}
         </section>
-
-        {collections.map((collection: PodcastCollection) => (
-          <section key={collection.id} className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-semibold">{collection.title}</h2>
-                {collection.description && (
-                  <p className="text-sm text-zinc-400">{collection.description}</p>
-                )}
-              </div>
-              <button className="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-500 hover:text-white">
-                Show all
-              </button>
-            </div>
-
-            {collection.layout === "grid" ? (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-                {collection.items.map((item: PodcastCollectionItem) => renderSquareCard(item))}
-              </div>
-            ) : (
-              <div className="flex gap-4 overflow-x-auto pb-2">
-                {collection.itemShape === "circle"
-                  ? collection.items.map((item: PodcastCollectionItem) => renderCircleCard(item))
-                  : collection.items.map((item: PodcastCollectionItem) => renderPillCard(item))}
-              </div>
-            )}
-          </section>
-        ))}
 
         <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
           <div className="space-y-4">
@@ -318,7 +318,7 @@ export default function PodcastPage() {
               className="min-h-32 resize-none rounded-2xl border-white/10 bg-black/40 text-sm text-white placeholder:text-zinc-500"
             />
             <div className="flex flex-wrap gap-2">
-              {exampleTopics.map((topic) => (
+              {exampleTopics.slice(0, 3).map((topic) => (
                 <Button
                   key={topic}
                   variant="ghost"
@@ -333,15 +333,12 @@ export default function PodcastPage() {
               {podcastHistory.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                   <span className="uppercase tracking-[0.3em] text-zinc-600">Recent</span>
-                  {podcastHistory.slice(0, 4).map((topic, index) => (
+                  {podcastHistory.slice(0, 3).map((topic, index) => (
                     <Button
                       key={`${topic}-${index}`}
                       variant="ghost"
                       className="rounded-full border border-white/5 bg-white/5 px-3 py-1 text-xs text-zinc-300 hover:bg-emerald-500/10 hover:text-white"
-                      onClick={() => {
-                        setInput(topic);
-                        handleGenerate(topic);
-                      }}
+                      onClick={() => handleGenerate(topic)}
                     >
                       {topic}
                     </Button>
@@ -372,7 +369,7 @@ export default function PodcastPage() {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-[#05070f]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-4xl flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-1 items-center gap-4">
             <div className="hidden h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/10 sm:block" />
             <div className="min-w-0">
@@ -381,7 +378,7 @@ export default function PodcastPage() {
               </p>
               <p className="text-xs text-zinc-500">
                 {currentSession
-                  ? currentSession.summary
+                  ? currentSession.description
                   : "Generate a podcast to start listening."}
               </p>
             </div>
@@ -416,15 +413,6 @@ export default function PodcastPage() {
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
-              size="sm"
-              className="rounded-full border border-white/10 bg-white/5 px-4 text-xs text-white hover:bg-white/10"
-              disabled={!currentSession}
-              onClick={() => setIsDialogOpen(true)}
-            >
-              View transcript
-            </Button>
-            <Button
-              variant="ghost"
               size="icon"
               className="rounded-full border border-white/10 bg-white/5 text-white hover:bg-white/10"
               disabled={!currentSession}
@@ -436,47 +424,13 @@ export default function PodcastPage() {
               size="icon"
               className="rounded-full border border-white/10 bg-white/5 text-white hover:bg-white/10"
               disabled={!currentSession}
+              onClick={handleDownload}
             >
               <Download className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </div>
-
-      <Dialog open={isDialogOpen && !!currentSession} onOpenChange={(open) => setIsDialogOpen(open)}>
-        <DialogContent className="max-w-2xl border border-white/10 bg-[#05070f] text-white" showCloseButton>
-          {currentSession && (
-            <>
-              <DialogHeader className="space-y-2">
-                <DialogTitle className="text-2xl font-semibold text-white">{currentSession.topic}</DialogTitle>
-                <DialogDescription className="text-sm text-zinc-400">
-                  Generated studio session • {currentSession.duration}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-2">
-                {currentSession.exchanges.map((exchange, index) => (
-                  <div
-                    key={`${exchange.speaker}-${index}`}
-                    className="rounded-2xl border border-white/10 bg-white/5 p-4"
-                  >
-                    <Badge
-                      className={cn(
-                        "mb-3 rounded-full border-none px-3 py-1 text-xs",
-                        exchange.speaker === "Host"
-                          ? "bg-emerald-500/20 text-emerald-200"
-                          : "bg-cyan-500/20 text-cyan-200"
-                      )}
-                    >
-                      {exchange.speaker}
-                    </Badge>
-                    <p className="text-sm leading-relaxed text-zinc-200">{exchange.text}</p>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

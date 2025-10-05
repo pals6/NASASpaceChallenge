@@ -5,6 +5,13 @@ import { createContext, useContext, useState, ReactNode } from "react";
 interface AppState {
   currentPage: string;
   setCurrentPage: (page: string) => void;
+
+  // Podcast playback
+  currentPodcast: {
+    topic: string;
+    audioUrl: string;
+  } | null;
+  setCurrentPodcast: (podcast: { topic: string; audioUrl: string } | null) => void;
   
   // Flash cards state
   flashcardsProgress: {
@@ -18,10 +25,14 @@ interface AppState {
   // Podcast state
   podcastHistory: string[];
   addToPodcastHistory: (topic: string) => void;
-  
+
   // Comic state
   comicHistory: string[];
   addToComicHistory: (story: string) => void;
+
+  // Chat state
+  chatHistory: string[];
+  addToChatHistory: (prompt: string) => void;
   
   // Timeline state
   selectedYear: number | null;
@@ -36,6 +47,10 @@ const AppContext = createContext<AppState | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentPage, setCurrentPage] = useState("/");
+  const [currentPodcast, setCurrentPodcast] = useState<{
+    topic: string;
+    audioUrl: string;
+  } | null>(null);
   
   // Flash cards state
   const [flashcardsProgress, setFlashcardsProgress] = useState({
@@ -46,6 +61,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // History states
   const [podcastHistory, setPodcastHistory] = useState<string[]>([]);
   const [comicHistory, setComicHistory] = useState<string[]>([]);
+  const [chatHistory, setChatHistory] = useState<string[]>([]);
   
   // Selection states
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -74,11 +90,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setComicHistory((prev) => [story, ...prev].slice(0, 10)); // Keep last 10
   };
 
+  const addToChatHistory = (prompt: string) => {
+    setChatHistory((prev) => [prompt, ...prev].slice(0, 10));
+  };
+
   return (
     <AppContext.Provider
       value={{
         currentPage,
         setCurrentPage,
+        currentPodcast,
+        setCurrentPodcast,
         flashcardsProgress,
         updateFlashcardsScore,
         addAnsweredCard,
@@ -87,6 +109,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addToPodcastHistory,
         comicHistory,
         addToComicHistory,
+        chatHistory,
+        addToChatHistory,
         selectedYear,
         setSelectedYear,
         selectedNode,
