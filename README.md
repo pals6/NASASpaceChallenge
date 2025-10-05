@@ -1,4 +1,3 @@
-````markdown
 # 🪐 **Aletheia**  
 ### *Revealing the science of life beyond Earth.*
 
