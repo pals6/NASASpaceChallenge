@@ -1,10 +1,25 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, BookOpen, Download, Sparkles } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Loader2,
+  BookOpen,
+  Download,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { useAppContext } from "@/contexts/AppContext";
 import { generateComic, getComicExamples, ComicPage as ComicPageType } from "@/lib/api";
 
@@ -45,13 +60,25 @@ export default function ComicPage() {
   const [pagesRequested, setPagesRequested] = useState<1 | 2>(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [session, setSession] = useState<ComicSession | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [activePageIndex, setActivePageIndex] = useState(0);
 
   const exampleStories = getComicExamples();
 
+  const releaseSessionResources = (value: ComicSession | null) => {
+    if (!value) return;
+    value.pages.forEach((page) => {
+      if (page.imageUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(page.imageUrl);
+      }
+    });
+  };
+
   useEffect(() => {
     return () => {
-      // future clean-up (no resources yet)
+      releaseSessionResources(session);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleGenerate = async (idea?: string, pageCount?: 1 | 2) => {
@@ -62,7 +89,9 @@ export default function ComicPage() {
     setIsGenerating(true);
     try {
       const comic = await generateComic(story, count);
-      const { from, to } = pickGradient(Number(session?.id ?? "0"));
+      const gradientIndex = Math.floor(Math.random() * gradientPalette.length);
+      const { from, to } = pickGradient(gradientIndex);
+      releaseSessionResources(session);
       const newSession: ComicSession = {
         id: `${Date.now()}`,
         storyIdea: story,
@@ -75,6 +104,7 @@ export default function ComicPage() {
       setSession(newSession);
       addToComicHistory(story);
       setStoryIdea("");
+      setActivePageIndex(0);
     } catch (error) {
       console.error("Failed to generate comic:", error);
     } finally {
@@ -82,10 +112,25 @@ export default function ComicPage() {
     }
   };
 
+  useEffect(() => {
+    if (!session) {
+      setIsDialogOpen(false);
+      return;
+    }
+
+    if (activePageIndex > session.pages.length - 1) {
+      setActivePageIndex(0);
+    }
+  }, [session, activePageIndex]);
+
   const cardsToShow: Array<
     | { type: "session"; data: ComicSession }
     | { type: "highlight"; data: typeof highlightCard }
-  > = session ? [{ type: "session", data: session }] : [];
+  > = [];
+
+  if (session) {
+    cardsToShow.push({ type: "session", data: session });
+  }
 
   cardsToShow.push({ type: "highlight", data: highlightCard });
 
@@ -110,6 +155,23 @@ export default function ComicPage() {
     URL.revokeObjectURL(url);
   };
 
+  const openViewer = (index = 0) => {
+    if (!session) return;
+    setActivePageIndex(index);
+    setIsDialogOpen(true);
+  };
+
+  const handleViewerChange = (direction: "prev" | "next") => {
+    if (!session) return;
+    setActivePageIndex((prev) => {
+      const total = session.pages.length;
+      if (direction === "prev") {
+        return prev === 0 ? total - 1 : prev - 1;
+      }
+      return prev === total - 1 ? 0 : prev + 1;
+    });
+  };
+
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-[#0b0d18] via-[#05070f] to-[#03040a] text-white pb-20">
       <div className="mx-auto max-w-4xl px-6 pb-24 pt-12 space-y-12">
@@ -128,9 +190,11 @@ export default function ComicPage() {
             if (card.type === "session") {
               const current = card.data;
               return (
-                <div
+                <button
+                  type="button"
                   key={current.id}
-                  className="relative overflow-hidden rounded-3xl p-6 text-left shadow-lg transition hover:-translate-y-1"
+                  onClick={() => openViewer(0)}
+                  className="relative overflow-hidden rounded-3xl p-6 text-left shadow-lg transition hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
                   style={{
                     background: `linear-gradient(150deg, ${current.gradientFrom}, ${current.gradientTo})`,
                   }}
@@ -157,7 +221,7 @@ export default function ComicPage() {
                       </span>
                     </div>
                   </div>
-                </div>
+                </button>
               );
             }
 
@@ -218,42 +282,34 @@ export default function ComicPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              {session.pages.map((page, index) => {
-                const { from, to } = pickGradient(index);
-                return (
-                  <div
-                    key={page.pageNumber}
-                    className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-sm"
-                  >
-                    <div
-                      className="mb-4 flex items-center justify-between rounded-2xl border border-white/15 bg-white/10 px-4 py-3"
-                    >
-                      <span className="text-sm font-semibold text-white">Page {page.pageNumber}</span>
-                      <Badge className="rounded-full border-none bg-white/15 px-3 py-1 text-[11px] uppercase tracking-[0.3em] text-white">
-                        4 panels
-                      </Badge>
-                    </div>
-                    <div
-                      className="aspect-[4/5] rounded-2xl border-2 border-dashed border-white/20 p-6 text-white"
-                      style={{
-                        background: `linear-gradient(150deg, ${from}, ${to})`,
-                      }}
-                    >
-                      <div className="flex h-full flex-col justify-between">
-                        <div className="text-xs uppercase tracking-[0.3em] text-white/80">
-                          Story beat
-                        </div>
-                        <div className="text-lg font-semibold leading-snug text-white">
-                          {page.title}
-                        </div>
-                        <p className="text-sm text-white/80">
-                          Visual direction: hero shot, context panel, discovery moment, closing beat.
-                        </p>
-                      </div>
-                    </div>
+              {session.pages.map((page) => (
+                <button
+                  type="button"
+                  key={page.pageNumber}
+                  onClick={() => openViewer(page.pageNumber - 1)}
+                  className="rounded-3xl border border-white/10 bg-white/5 p-5 text-left shadow-sm transition hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
+                >
+                  <div className="mb-4 flex items-center justify-between rounded-2xl border border-white/15 bg-white/10 px-4 py-3">
+                    <span className="text-sm font-semibold text-white">Page {page.pageNumber}</span>
+                    <Badge className="rounded-full border-none bg-white/15 px-3 py-1 text-[11px] uppercase tracking-[0.3em] text-white">
+                      4 panels
+                    </Badge>
                   </div>
-                );
-              })}
+                  <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-white/15">
+                    <Image
+                      src={page.imageUrl}
+                      alt={`Generated comic page ${page.pageNumber}`}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                      unoptimized
+                    />
+                  </div>
+                  <p className="mt-3 text-sm text-zinc-300">
+                    {page.title || "Storyboard concept"}
+                  </p>
+                </button>
+              ))}
             </div>
           </section>
         )}
@@ -317,6 +373,60 @@ export default function ComicPage() {
           </div>
         </section>
       </div>
+
+      <Dialog open={isDialogOpen && !!session} onOpenChange={(open) => setIsDialogOpen(open)}>
+        <DialogContent className="max-w-3xl border border-white/10 bg-[#05070f] text-white">
+          {session && session.pages[activePageIndex] && (
+            <>
+              <DialogHeader className="space-y-2">
+                <DialogTitle className="text-2xl font-semibold text-white">
+                  {session.storyIdea}
+                </DialogTitle>
+                <DialogDescription className="text-sm text-zinc-400">
+                  Page {session.pages[activePageIndex].pageNumber} of {session.pages.length}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="relative mt-4">
+                <div className="relative mx-auto h-[60vh] max-h-[720px] w-full overflow-hidden rounded-3xl border border-white/15">
+                  <Image
+                    src={session.pages[activePageIndex].imageUrl}
+                    alt={`Comic page ${session.pages[activePageIndex].pageNumber}`}
+                    fill
+                    className="object-contain"
+                    sizes="(max-width: 768px) 100vw, 70vw"
+                    unoptimized
+                  />
+                </div>
+                {session.pages.length > 1 && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full border border-white/10 bg-white/10 text-white hover:bg-white/20"
+                      onClick={() => handleViewerChange("prev")}
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full border border-white/10 bg-white/10 text-white hover:bg-white/20"
+                      onClick={() => handleViewerChange("next")}
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              <p className="mt-4 text-sm text-zinc-300">
+                {session.pages[activePageIndex].title || "Storyboard concept"}
+              </p>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
