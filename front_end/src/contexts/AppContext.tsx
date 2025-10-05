@@ -5,6 +5,13 @@ import { createContext, useContext, useState, ReactNode } from "react";
 interface AppState {
   currentPage: string;
   setCurrentPage: (page: string) => void;
+
+  // Podcast playback
+  currentPodcast: {
+    topic: string;
+    audioUrl: string;
+  } | null;
+  setCurrentPodcast: (podcast: { topic: string; audioUrl: string } | null) => void;
   
   // Flash cards state
   flashcardsProgress: {
@@ -18,7 +25,7 @@ interface AppState {
   // Podcast state
   podcastHistory: string[];
   addToPodcastHistory: (topic: string) => void;
-  
+
   // Comic state
   comicHistory: string[];
   addToComicHistory: (story: string) => void;
@@ -36,6 +43,10 @@ const AppContext = createContext<AppState | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentPage, setCurrentPage] = useState("/");
+  const [currentPodcast, setCurrentPodcast] = useState<{
+    topic: string;
+    audioUrl: string;
+  } | null>(null);
   
   // Flash cards state
   const [flashcardsProgress, setFlashcardsProgress] = useState({
@@ -79,6 +90,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         currentPage,
         setCurrentPage,
+        currentPodcast,
+        setCurrentPodcast,
         flashcardsProgress,
         updateFlashcardsScore,
         addAnsweredCard,
